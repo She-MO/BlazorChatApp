@@ -1,0 +1,94 @@
+﻿@page "/chat"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.EntityFrameworkCore
+@using BlazorChatApp_2.Models
+@using BlazorChatApp_2.Data
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@inject NavigationManager Navigation
+@inject UserManager<ApplicationUser> UserManager
+@inject BlazorChatApp_2.Data.ApplicationDbContext _db
+@inject AuthenticationStateProvider authStateProvider
+@implements IAsyncDisposable
+
+<PageTitle>Home</PageTitle>
+
+
+<div class="form-group">
+    <label>
+        Message:
+        <input @bind="messageInput" size="50" />
+    </label>
+</div>
+<button @onclick="Send" disabled="@(!IsConnected)">Send</button>
+
+<hr>
+
+<ul id="messagesList">
+    @if (messages is not null)
+    {
+        @foreach (var message in messages)
+        {
+            <li>@($"{message.Sender.Nickname} : {message.Text}")</li>
+        }
+    }
+</ul>
+
+@code {
+    private HubConnection? hubConnection;
+    private List<Message>? messages;
+    private string? messageInput;
+    private AuthenticationState? authenticationState;
+    protected override async Task OnInitializedAsync()
+    {
+        authenticationState = await authStateProvider.GetAuthenticationStateAsync();
+        messages = await _db.Messages.Include(message => message.Sender).ToListAsync();
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/chathub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<Message>("ReceiveMessage", (message) =>
+        {
+            messages.Add(message);
+            InvokeAsync(StateHasChanged);
+        });
+
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task Send()
+    {
+        if (hubConnection is not null)
+        {
+            string? userId = (await UserManager.GetUserAsync(authenticationState.User))?.Id;
+            Message? msg = new Message(messageInput, DateTime.UtcNow, userId);
+            messageInput = String.Empty;
+            _db.Messages.Add(msg);
+            await _db.SaveChangesAsync();
+            msg = await _db.Messages.Include(message => message.Sender).FirstOrDefaultAsync(
+                message => message.Text == msg.Text && 
+                message.SenderId == msg.SenderId && 
+                DateTime.Compare(message.DateTime, msg.DateTime) == 0 );
+            await hubConnection.SendAsync("SendMessage", msg);
+        }
+    }
+
+    public bool IsConnected =>
+        hubConnection?.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
