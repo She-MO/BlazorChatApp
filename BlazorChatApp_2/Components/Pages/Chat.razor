@@ -8,6 +8,8 @@
 @using BlazorChatApp_2.Data
 @using System.ComponentModel.DataAnnotations
 @using System.Text
+@using System.Net
+@using BlazorChatApp_2.Components.Layout
 @using System.Text.Encodings.Web
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
@@ -17,7 +19,6 @@
 @inject AuthenticationStateProvider authStateProvider
 @implements IAsyncDisposable
 
-<PageTitle>Home</PageTitle>
 
 
 <div class="form-group">
@@ -41,6 +42,10 @@
 </ul>
 
 @code {
+
+    [CascadingParameter]
+    public IRequestCookieCollection? Cookies { get; set; }
+
     private HubConnection? hubConnection;
     private List<Message>? messages;
     private string? messageInput;
@@ -50,7 +55,19 @@
         authenticationState = await authStateProvider.GetAuthenticationStateAsync();
         messages = await _db.Messages.Include(message => message.Sender).ToListAsync();
         hubConnection = new HubConnectionBuilder()
-            .WithUrl(Navigation.ToAbsoluteUri("/chathub"))
+            .WithUrl(Navigation.ToAbsoluteUri("/chathub"), options =>
+            {
+                options.UseDefaultCredentials = true;
+                var cookieCount = Cookies.Count();
+                var cookieContainer = new CookieContainer(cookieCount);
+                foreach (var cookie in Cookies)
+                    cookieContainer.Add(new Cookie(
+                cookie.Key,
+                WebUtility.UrlEncode(cookie.Value),
+                path: "/",
+                domain: Navigation.ToAbsoluteUri("/").Host));
+                options.Cookies = cookieContainer;
+            })
             .WithAutomaticReconnect()
             .Build();
 
@@ -60,16 +77,16 @@
             InvokeAsync(StateHasChanged);
         });
 
-
         await hubConnection.StartAsync();
+        
     }
 
     private async Task Send()
     {
         if (hubConnection is not null)
         {
-            string? userId = (await UserManager.GetUserAsync(authenticationState.User))?.Id;
-            Message? msg = new Message(messageInput, DateTime.UtcNow, userId);
+            ApplicationUser? user = await UserManager.GetUserAsync(authenticationState.User);
+            Message? msg = new Message(messageInput, DateTime.UtcNow, user);
             messageInput = String.Empty;
             _db.Messages.Add(msg);
             await _db.SaveChangesAsync();
@@ -77,7 +94,7 @@
                 message => message.Text == msg.Text && 
                 message.SenderId == msg.SenderId && 
                 DateTime.Compare(message.DateTime, msg.DateTime) == 0 );
-            await hubConnection.SendAsync("SendMessage", msg);
+            await hubConnection.SendAsync("SendMessage", msg, authenticationState.User.Identity.Name);
         }
     }
 

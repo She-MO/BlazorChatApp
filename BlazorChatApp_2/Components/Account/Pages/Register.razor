@@ -6,7 +6,7 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
 @using BlazorChatApp_2.Data
-
+@using System.Security.Claims
 @inject UserManager<ApplicationUser> UserManager
 @inject IUserStore<ApplicationUser> UserStore
 @inject SignInManager<ApplicationUser> SignInManager
@@ -84,7 +84,7 @@
             identityErrors = result.Errors;
             return;
         }
-
+        await UserManager.AddClaimAsync(user, new Claim(ClaimTypes.NameIdentifier, Input.Email));
         Logger.LogInformation("User created a new account with password.");
 
         var userId = await UserManager.GetUserIdAsync(user);

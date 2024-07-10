@@ -1,11 +1,14 @@
 using BlazorChatApp_2.Components;
 using BlazorChatApp_2.Components.Account;
+using BlazorChatApp_2.CustomIdProvider;
 using BlazorChatApp_2.Data;
 using BlazorChatApp_2.Hubs;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 
 namespace BlazorChatApp_2
 {
@@ -23,6 +26,10 @@ namespace BlazorChatApp_2
             builder.Services.AddScoped<IdentityUserAccessor>();
             builder.Services.AddScoped<IdentityRedirectManager>();
             builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
+            //builder.Services.AddAuthorization();
+            builder.Services.AddSingleton<IUserIdProvider, ChatAppCustomIdProvider>();
+            IRequestCookieCollection? Cookies = null;
+            builder.Services.AddCascadingValue(sp => Cookies);
             builder.Services.AddResponseCompression(opts =>
             {
                 opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
@@ -65,14 +72,17 @@ namespace BlazorChatApp_2
 
             app.UseStaticFiles();
             app.UseAntiforgery();
-
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
             // Add additional endpoints required by the Identity /Account Razor components.
             app.MapAdditionalIdentityEndpoints();
             app.MapHub<ChatHub>("/chathub");
-
+            app.Use(async (context, next) =>
+            {
+                Cookies = context.Request.Cookies;
+                await next.Invoke();
+            });
             app.Run();
         }
     }

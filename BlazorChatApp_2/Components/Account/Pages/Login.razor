@@ -70,6 +70,9 @@
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
+    [CascadingParameter]
+    private IRequestCookieCollection Cookies { get; set; }
+
     [SupplyParameterFromForm]
     private InputModel Input { get; set; } = new();
 
@@ -92,6 +95,8 @@
         var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
         if (result.Succeeded)
         {
+            //var cookies = HttpContext.Request.Cookies;
+            Cookies = HttpContext.Request.Cookies;
             Logger.LogInformation("User logged in.");
             RedirectManager.RedirectTo(ReturnUrl);
         }

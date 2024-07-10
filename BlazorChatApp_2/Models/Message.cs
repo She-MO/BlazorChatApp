@@ -10,11 +10,12 @@ public class Message
     public string SenderId { get; set; }
     public ApplicationUser Sender { get; set; }
     public Message() { }
-    public Message(string text, DateTime dateTime, string userId)
+    public Message(string text, DateTime dateTime, ApplicationUser user)
     {
         Text = text;
         DateTime = dateTime;
-        SenderId = userId;
+        Sender = user;
+        SenderId = user.Id;
     }
 
 }
