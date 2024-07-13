@@ -9,13 +9,17 @@ public class Message
     public DateTime DateTime { get; set; }
     public string SenderId { get; set; }
     public ApplicationUser Sender { get; set; }
+    public int? ChatId { get; set; }
+    public Chat? Chat { get; set; }
+    public int? RepliedToMessageWithId { get; set; }
+    public Message? RepliedToMessage { get; set; }
     public Message() { }
-    public Message(string text, DateTime dateTime, ApplicationUser user)
+    public Message(string text, DateTime dateTime, ApplicationUser user, int chatId)
     {
         Text = text;
         DateTime = dateTime;
-        Sender = user;
         SenderId = user.Id;
+        ChatId = chatId;
     }
 
 }
