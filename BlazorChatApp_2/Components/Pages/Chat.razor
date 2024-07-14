@@ -15,23 +15,25 @@
 @using Microsoft.AspNetCore.WebUtilities
 @inject NavigationManager Navigation
 @inject UserManager<ApplicationUser> UserManager
-@* @inject BlazorChatApp_2.Data.ApplicationDbContext _db *@
 @inject IDbContextFactory<ApplicationDbContext> contextFactory
 @inject AuthenticationStateProvider authStateProvider
 @implements IAsyncDisposable
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
-        @if (chats is not null && chats.Count > 0)
-        {
-            @foreach (var ch in chats)
+<div class="sidebar">
+    <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+        <nav class="flex-column">
+            @if (chats is not null && chats.Count > 0)
             {
-                <div class="nav-item px-3" @onclick="@(e => ChangeChat(ch))">
-                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> @ch.Name
-                </div>
+                @foreach (var ch in chats)
+                {
+                    <div class="nav-item px-3" @onclick="@(e => ChangeChat(ch))">
+                        <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> @ch.Name (@ch.Members[0].Nickname, @ch.Members[1].Nickname)
+                    </div>
+                }
             }
-        }
-    </nav>
+        </nav>
+    </div>
 </div>
+
 
 
 <div class="form-group">
@@ -107,13 +109,14 @@
             chats?.First(ch => ch.Id == message.ChatId)?.Messages?.Add(message);
             InvokeAsync(StateHasChanged);
         });
-        hubConnection.On<Message>("ReceiveMessage2", async (message) =>
+        hubConnection.On<Message>("ReceiveMessage2", (message) =>
         {
             chats?.First(ch => ch.Id == message.ChatId)?.Messages?.Add(message);
-            await InvokeAsync(StateHasChanged);
+            InvokeAsync(StateHasChanged);
         });
-        hubConnection.On<Models.Chat>("AddChat", (chat) =>
+        hubConnection.On<string>("AddChat", (serializedChat) =>
         {
+            Models.Chat? chat = Newtonsoft.Json.JsonConvert.DeserializeObject<Models.Chat>(serializedChat);
             chats?.Add(chat);
             InvokeAsync(StateHasChanged);
         });
@@ -142,7 +145,6 @@
                     });
             await hubConnection.SendAsync("SendMessage", serializedMsg, userIds);
             //await hubConnection.SendAsync("SendMessage2", msg, userIds);
-            //var testVar = new ApplicationUser();
         }
     }
     private async Task AddNewChat()
@@ -150,12 +152,12 @@
         if (hubConnection is not null)
         {
             using var _db = contextFactory.CreateDbContext();
-            ApplicationUser? user1 = await UserManager.GetUserAsync(authenticationState.User);
+            ApplicationUser? user1 = await _db.Users.FirstOrDefaultAsync(usr => usr.UserName == authenticationState.User.Identity.Name);
             ApplicationUser? user2 = await _db.Users.FirstOrDefaultAsync(usr => usr.UserName == chatInput);
             Models.Chat? newChat;
             if (chats?.Count > 0)
             {
-                newChat = chats?.First(cht => cht.Members.Contains(user2));
+                newChat = chats?.FirstOrDefault(cht => cht.Members.Contains(user2));
                 if (newChat is not null)
                 {
                     return;
@@ -165,7 +167,13 @@
             chatInput = String.Empty;
             _db.Chats.Add(newChat);
             await _db.SaveChangesAsync();
-            await hubConnection.SendAsync("SendNewChat", newChat, user1.Id, user2.Id);
+            string serializedChat = Newtonsoft.Json.JsonConvert.SerializeObject(newChat, Newtonsoft.Json.Formatting.Indented,
+                 new Newtonsoft.Json.JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore
+                });
+            string[] userIds = newChat.Members.Select(member => member.Id).ToArray();
+            await hubConnection.SendAsync("SendNewChat", serializedChat, userIds);
         }
     }
     private async Task ChangeChat(Models.Chat newOpenedChat)

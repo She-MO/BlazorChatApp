@@ -26,7 +26,7 @@ public class ChatHub : Hub
         }
 
     }
-    public async Task SendNewChat(Models.Chat newChat, params string[] recievers)
+    public async Task SendNewChat(string newChat, string[] recievers)
     {
         await Clients.Users(recievers).SendAsync("AddChat", newChat);
     }
